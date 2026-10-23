@@ -236,6 +236,7 @@ src/
 | SiliconFlow | DeepSeek-V3, Qwen, Llama | 国内高速访问 |
 | DeepSeek | DeepSeek Chat, DeepSeek Reasoner | 性价比高 |
 | OpenRouter | 300+模型聚合，含免费模型 | 一个Key访问所有模型 |
+| Agnes AI | Agnes 2.5 Flash | 文本/视觉统一网关，同Key可用图片/视频 |
 | 自定义 | 任何 OpenAI 兼容接口 | 中转站/私有部署 |
 
 ### 图片生成
@@ -245,6 +246,7 @@ src/
 | OpenAI | DALL·E 3, GPT Image 1 | 创意图片, 最新模型 |
 | SiliconFlow | SDXL, FLUX.1 Schnell/Dev, SD 3.5 Large | 国内高速访问 |
 | Stability AI | SDXL, SD 3.5 Large, Stable Image Core | 官方API |
+| Agnes AI | Agnes Image 2.5 Flash | 文生图/图生图/多图合成，1K-4K |
 | z-ai-sdk | DALL·E 3 | 内置，无需额外配置 |
 
 ### 视频生成
@@ -252,6 +254,7 @@ src/
 |--------|------|------|
 | Seedance 2.0 | Pro / Lite | 字节跳动，支持图生视频，高质量 |
 | SiliconFlow | Ali Video 01, Hunyuan Video | 国内视频生成 |
+| Agnes AI | Agnes Video 2.5 / 2.5 Flash | 文生视频/首末帧，720P-2K |
 | z-ai-sdk | 内置模型 | 内置视频生成 |
 | 火山引擎 | Kling | 高质量视频 |
 

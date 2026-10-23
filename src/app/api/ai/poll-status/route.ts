@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getActiveProvider } from '@/lib/ai-config'
+import { getActiveProviderForUser } from '@/lib/ai-config'
 import { requireAuth } from '@/lib/auth-helpers'
 import { saveMediaFile } from '@/lib/file-storage'
+import { db } from '@/lib/db'
 
 // POST /api/ai/poll-status - Check the status of an async AI generation task
 // Used by the client to poll for results when the API returns { status: 'processing', taskId }
@@ -12,13 +13,14 @@ export async function POST(request: NextRequest) {
     if (auth.error) return auth.error
 
     const body = await request.json()
-    const { category, taskId, dramaId } = body
+    const { category, taskId, dramaId, storyboardId } = body
 
     if (!category || !taskId) {
       return NextResponse.json({ error: 'Missing category or taskId' }, { status: 400 })
     }
 
-    const provider = await getActiveProvider(category)
+    // Resolve the same provider generation used (user-level key first, then platform default)
+    const provider = await getActiveProviderForUser(category, auth.userId)
     if (!provider) {
       return NextResponse.json({ error: 'No active provider' }, { status: 400 })
     }
@@ -76,7 +78,20 @@ export async function POST(request: NextRequest) {
       const pollParsed = adapter.parsePollResponse(pollData)
 
       if (pollParsed.status === 'completed') {
+        // Persist the finished video so the storyboard leaves "processing"
+        if (storyboardId && pollParsed.videoUrl) {
+          await db.storyboard.update({
+            where: { id: storyboardId },
+            data: { videoUrl: pollParsed.videoUrl, status: 'completed' },
+          }).catch(() => { /* non-critical */ })
+        }
         return NextResponse.json({ status: 'completed', videoUrl: pollParsed.videoUrl })
+      }
+      if (pollParsed.status === 'failed' && storyboardId) {
+        await db.storyboard.update({
+          where: { id: storyboardId },
+          data: { status: 'failed' },
+        }).catch(() => { /* non-critical */ })
       }
       return NextResponse.json({ status: pollParsed.status, error: pollParsed.error })
     }

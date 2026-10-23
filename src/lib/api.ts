@@ -1039,7 +1039,7 @@ export const api = {
         body: JSON.stringify({ characterId, voiceId, text }),
       }),
 
-    pollStatus: (category: 'image' | 'video', taskId: string) =>
+    pollStatus: (category: 'image' | 'video', taskId: string, storyboardId?: string) =>
       request<{
         status: 'pending' | 'processing' | 'completed' | 'failed' | 'unsupported'
         imageBase64?: string
@@ -1048,7 +1048,7 @@ export const api = {
       }>('/api/ai/poll-status', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ category, taskId }),
+        body: JSON.stringify({ category, taskId, storyboardId }),
       }),
 
     // Lock character style for consistency
