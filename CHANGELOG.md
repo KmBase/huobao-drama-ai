@@ -23,6 +23,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `.env.example`: 新增 `AGNES_API_KEY`
 - README: 补充 Agnes 的 LLM / 图片 / 视频能力说明
 
+### Changed — Agnes 默认网关切换至中国服务
+
+- Agnes 三处预设 `defaultBaseUrl` 由 `https://apihub.agnes-ai.com/v1`（国际）切换为 `https://api.agnes-ai.cn/v1`（中国）
+- `ai-config.ts`: 新增旧国际地址 → 中国地址的读取时映射（`resolveAgnesBaseUrl`），
+  存量 DB 记录保存的旧地址在 `getActiveProvider` / `getActiveProviderForUser` / `getAllProviders`
+  三处解析时统一替换，已部署环境立即生效；存量数据刷新后此映射可移除
+- `.env.example`: 注释更新为中国地址为主，国际地址为备选
+
 ### Fixed — 剧本工坊全流程可用 (P0)
 
 #### 根因: NVIDIA 默认模型 EOL

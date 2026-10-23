@@ -209,7 +209,7 @@ export const PROVIDER_PRESETS: Record<AiCategory, ProviderPreset[]> = {
     {
       provider: 'agnes',
       name: 'Agnes AI',
-      defaultBaseUrl: 'https://apihub.agnes-ai.com/v1',
+      defaultBaseUrl: 'https://api.agnes-ai.cn/v1',
       defaultModel: 'agnes-2.5-flash',
       description: 'Agnes AI 开放平台 — 文本/视觉、图片、视频统一网关，OpenAI 兼容接口',
       envKey: 'AGNES_API_KEY',
@@ -335,7 +335,7 @@ export const PROVIDER_PRESETS: Record<AiCategory, ProviderPreset[]> = {
     {
       provider: 'agnes',
       name: 'Agnes AI 图片',
-      defaultBaseUrl: 'https://apihub.agnes-ai.com/v1',
+      defaultBaseUrl: 'https://api.agnes-ai.cn/v1',
       defaultModel: 'agnes-image-2.5-flash',
       description: 'Agnes 图片生成 — 文生图 / 图生图 / 多图合成，支持 1K-4K 输出',
       envKey: 'AGNES_API_KEY',
@@ -446,7 +446,7 @@ export const PROVIDER_PRESETS: Record<AiCategory, ProviderPreset[]> = {
     {
       provider: 'agnes',
       name: 'Agnes AI 视频',
-      defaultBaseUrl: 'https://apihub.agnes-ai.com/v1',
+      defaultBaseUrl: 'https://api.agnes-ai.cn/v1',
       defaultModel: 'agnes-video-2.5',
       description: 'Agnes 视频生成 — 文生视频 / 首末帧 / 多模态参考，720P-2K 输出',
       envKey: 'AGNES_API_KEY',
