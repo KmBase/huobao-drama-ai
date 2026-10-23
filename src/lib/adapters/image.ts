@@ -585,6 +585,133 @@ export class AliImageAdapter implements ImageProviderAdapter {
 }
 
 // ============================================================
+// Agnes Image Adapter (Agnes AI — OpenAI-compatible gateway)
+// Docs: https://agnes-ai.com/en/docs/agnes-image-25-flash
+// Agnes takes a size tier (1K-4K) plus a ratio instead of
+// pixel dimensions, so pixel sizes are mapped to the closest
+// supported tier/ratio. Reference images go in `image`, which
+// the OpenAI SDK exposes via extra_body (i.e. top-level JSON).
+// ============================================================
+
+const AGNES_RATIOS: Array<{ label: string; value: number }> = [
+  { label: '1:1', value: 1 },
+  { label: '3:4', value: 3 / 4 },
+  { label: '4:3', value: 4 / 3 },
+  { label: '16:9', value: 16 / 9 },
+  { label: '9:16', value: 9 / 16 },
+  { label: '2:3', value: 2 / 3 },
+  { label: '3:2', value: 3 / 2 },
+  { label: '21:9', value: 21 / 9 },
+]
+
+/** Snap an arbitrary aspect ratio to the closest ratio Agnes supports. */
+function snapToAgnesRatio(width: number, height: number): string {
+  const target = width / height
+  if (!isFinite(target) || target <= 0) return '1:1'
+
+  let best = AGNES_RATIOS[0]
+  let bestDistance = Infinity
+  for (const ratio of AGNES_RATIOS) {
+    const distance = Math.abs(Math.log(target / ratio.value))
+    if (distance < bestDistance) {
+      bestDistance = distance
+      best = ratio
+    }
+  }
+  return best.label
+}
+
+/** Map a requested size ("1024x1024", "2K", ...) to an Agnes size tier. */
+function agnesSizeTier(size?: string): string {
+  if (size) {
+    const tier = size.trim().toUpperCase().match(/^([1-4])K$/)
+    if (tier) return `${tier[1]}K`
+  }
+
+  const { width, height } = parseSize(size)
+  const longest = Math.max(width, height)
+  if (longest <= 1024) return '1K'
+  if (longest <= 2048) return '2K'
+  if (longest <= 3072) return '3K'
+  return '4K'
+}
+
+export class AgnesImageAdapter implements ImageProviderAdapter {
+  buildGenerateRequest(
+    config: { baseUrl: string; apiKey: string; model: string },
+    params: { prompt: string; size?: string; negativePrompt?: string; referenceImages?: string[]; referenceImagesData?: ReferenceImageData[] }
+  ): ProviderRequest {
+    const url = joinProviderUrl(config.baseUrl, '/v1', '/images/generations')
+    const { width, height } = parseSize(params.size)
+
+    const body: Record<string, unknown> = {
+      model: config.model || 'agnes-image-2.5-flash',
+      prompt: params.prompt,
+      size: agnesSizeTier(params.size),
+      ratio: snapToAgnesRatio(width, height),
+      n: 1,
+      response_format: 'url',
+    }
+
+    // Image editing / multi-image composition uses the `image` array
+    if (params.referenceImages?.length) {
+      body.image = params.referenceImages
+    }
+
+    return {
+      url,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${config.apiKey}`,
+      },
+      body,
+    }
+  }
+
+  parseGenerateResponse(result: any): {
+    isAsync: boolean
+    taskId?: string
+    imageUrl?: string
+    imageBase64?: string
+  } {
+    if (result?.task_id) {
+      return { isAsync: true, taskId: result.task_id }
+    }
+
+    if (result?.data?.length) {
+      const b64 = result.data[0]?.b64_json
+      if (b64) {
+        return { isAsync: false, imageBase64: b64 }
+      }
+      const imageUrl = result.data[0]?.url
+      if (imageUrl) {
+        return { isAsync: false, imageUrl }
+      }
+    }
+
+    return { isAsync: false }
+  }
+
+  buildPollRequest(
+    _config: { baseUrl: string; apiKey: string; model: string },
+    _taskId: string
+  ): ProviderRequest | null {
+    // Agnes image generation is synchronous — no polling needed
+    return null
+  }
+
+  parsePollResponse(_result: unknown): {
+    status: 'pending' | 'processing' | 'completed' | 'failed'
+    imageUrl?: string
+    imageBase64?: string
+    error?: string
+  } {
+    return { status: 'failed', error: 'Agnes image generation is synchronous — no polling needed' }
+  }
+}
+
+// ============================================================
 // Adapter Registry
 // ============================================================
 
@@ -595,6 +722,7 @@ export const imageAdapters: Record<string, ImageProviderAdapter> = {
   minimax: new MiniMaxImageAdapter(),
   volcengine: new VolcEngineImageAdapter(),
   ali: new AliImageAdapter(),
+  agnes: new AgnesImageAdapter(),
 }
 
 /**

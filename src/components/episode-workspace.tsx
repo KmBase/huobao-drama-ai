@@ -725,14 +725,15 @@ export function EpisodeWorkspace() {
     taskId: string,
     interval = 5000,
     maxPolls = 60,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    storyboardId?: string
   ): Promise<{ imageBase64?: string; videoUrl?: string } | null> => {
     for (let i = 0; i < maxPolls; i++) {
       if (signal?.aborted) return null
       await new Promise((r) => setTimeout(r, interval))
       if (signal?.aborted) return null
       try {
-        const pollResult = await api.ai.pollStatus(category, taskId)
+        const pollResult = await api.ai.pollStatus(category, taskId, storyboardId)
         if (pollResult.status === 'completed') {
           return { imageBase64: pollResult.imageBase64, videoUrl: pollResult.videoUrl }
         }
@@ -1027,7 +1028,7 @@ export function EpisodeWorkspace() {
         pollAbortRef.current?.abort()
         const controller = new AbortController()
         pollAbortRef.current = controller
-        await pollAsyncTask('video', result.taskId as string, 10000, 60, controller.signal)
+        await pollAsyncTask('video', result.taskId as string, 10000, 60, controller.signal, storyboard.id)
       }
       toast({ title: `镜头 ${storyboard.shotNumber} 视频已生成` })
       await fetchEpisode()
@@ -1088,7 +1089,7 @@ export function EpisodeWorkspace() {
           pollAbortRef.current?.abort()
           const controller = new AbortController()
           pollAbortRef.current = controller
-          await pollAsyncTask('video', result.taskId as string, 10000, 60, controller.signal)
+          await pollAsyncTask('video', result.taskId as string, 10000, 60, controller.signal, sb.id)
         }
         successCount++
       } catch {

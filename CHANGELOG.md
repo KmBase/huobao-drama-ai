@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — Agnes AI 供应商适配
+
+- `provider-presets.ts`: 新增 `agnes` 预设（LLM / 图片 / 视频）
+  - LLM `agnes-2.5-flash`：`POST /v1/chat/completions`，OpenAI 兼容
+  - 图片 `agnes-image-2.5-flash`：`POST /v1/images/generations`，尺寸档位 1K-4K + 比例
+  - 视频 `agnes-video-2.5` / `agnes-video-2.5-flash`：`POST /v1/videos`
+- `adapters/image.ts`: 新增 `AgnesImageAdapter`
+  - 像素尺寸自动映射到 Agnes 的 `size` 档位与最接近的支持比例
+  - 参考图走 `image` 数组（图生图/多图合成），同步返回 `data[0].url` 或 `b64_json`
+- `adapters/video.ts`: 新增 `AgnesVideoAdapter`
+  - 首帧/末帧自动切换 `mode: keyframe`，时长限制 4-12 秒
+  - 轮询使用 `GET /agnesapi?video_id=<ID>&model_name=<MODEL>`
+- `poll-status`: 支持可选 `storyboardId`，异步视频完成后自动写回 `Storyboard.videoUrl` 与状态；轮询改用与生成一致的用户级 provider 解析
+- `.env.example`: 新增 `AGNES_API_KEY`
+- README: 补充 Agnes 的 LLM / 图片 / 视频能力说明
+
 ### Fixed — 剧本工坊全流程可用 (P0)
 
 #### 根因: NVIDIA 默认模型 EOL

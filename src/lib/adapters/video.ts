@@ -568,6 +568,135 @@ export class SCnetVideoAdapter implements VideoProviderAdapter {
 }
 
 // ============================================================================
+// Agnes Video Adapter (Agnes AI)
+// Create: POST /v1/videos
+// Poll:   GET /agnesapi?video_id=<VIDEO_ID>&model_name=<MODEL_ID>
+// Agnes requires the model name on every poll for keyframe/reference modes,
+// so the poll request is built from the adapter config, not just the task id.
+// ============================================================================
+
+/** Strip the /v1 API prefix to reach the gateway's /agnesapi polling route. */
+function agnesGatewayOrigin(baseUrl: string): string {
+  try {
+    const u = new URL(baseUrl)
+    return `${u.protocol}//${u.host}`
+  } catch {
+    return baseUrl.replace(/\/v1\/?$/i, '').replace(/\/+$/, '')
+  }
+}
+
+export class AgnesVideoAdapter implements VideoProviderAdapter {
+  buildGenerateRequest(
+    config: { baseUrl: string; apiKey: string; model: string },
+    params: { prompt: string; firstFrameUrl?: string; lastFrameUrl?: string; duration?: number }
+  ): ProviderRequest {
+    const model = config.model || 'agnes-video-2.5'
+    // Agnes expects whole seconds 4-12 as a string
+    const seconds = String(Math.max(4, Math.min(12, Math.round(params.duration || 5))))
+    const isFlash = /flash/i.test(model)
+    const hasFrame = Boolean(params.firstFrameUrl || params.lastFrameUrl)
+
+    const body: Record<string, unknown> = {
+      model,
+      prompt: params.prompt,
+      seconds,
+      // Flash is limited to 720P; the base model supports up to 2K
+      size: isFlash ? '720P' : '1080P',
+      n: 1,
+      mode: hasFrame ? 'keyframe' : 'text',
+    }
+
+    if (params.firstFrameUrl) {
+      body.first_frame = params.firstFrameUrl
+    }
+    if (params.lastFrameUrl) {
+      body.last_frame = params.lastFrameUrl
+    }
+
+    return {
+      url: joinProviderUrl(config.baseUrl, '/v1', '/videos'),
+      method: 'POST',
+      headers: { Authorization: `Bearer ${config.apiKey}`, 'Content-Type': 'application/json' },
+      body,
+    }
+  }
+
+  parseGenerateResponse(result: unknown): {
+    isAsync: boolean
+    taskId?: string
+    videoUrl?: string
+  } {
+    const resp = result as Record<string, unknown>
+    const status = String(resp.status ?? '').toLowerCase()
+
+    // A finished video may already be returned inline
+    if (typeof resp.url === 'string' && (status === '' || status === 'completed' || status === 'succeeded')) {
+      return { isAsync: false, videoUrl: resp.url }
+    }
+
+    // The create response may include id, task_id and video_id — use video_id
+    const taskId =
+      (resp.video_id as string | undefined) ||
+      (resp.task_id as string | undefined) ||
+      (resp.id as string | undefined)
+
+    if (!taskId) {
+      throw new Error(`Agnes Video: API returned no video_id. Response: ${JSON.stringify(result).slice(0, 500)}`)
+    }
+
+    return { isAsync: true, taskId }
+  }
+
+  buildPollRequest(
+    config: { baseUrl: string; apiKey: string; model: string },
+    taskId: string
+  ): ProviderRequest | null {
+    const origin = agnesGatewayOrigin(config.baseUrl)
+    const modelName = config.model || 'agnes-video-2.5'
+
+    return {
+      url: `${origin}/agnesapi?video_id=${encodeURIComponent(taskId)}&model_name=${encodeURIComponent(modelName)}`,
+      method: 'GET',
+      headers: { Authorization: `Bearer ${config.apiKey}` },
+      body: null,
+    }
+  }
+
+  parsePollResponse(result: unknown): {
+    status: 'pending' | 'processing' | 'completed' | 'failed'
+    videoUrl?: string
+    error?: string
+  } {
+    const resp = result as Record<string, unknown>
+    const status = String(resp.status ?? '').toLowerCase()
+    const videoUrl =
+      (resp.url as string | undefined) ||
+      (resp.video_url as string | undefined) ||
+      ((resp.output as Record<string, unknown> | undefined)?.url as string | undefined)
+
+    if (status === 'completed' || status === 'succeeded' || status === 'success') {
+      if (!videoUrl) {
+        return { status: 'failed', error: 'Agnes Video: Task completed but no url returned' }
+      }
+      return { status: 'completed', videoUrl }
+    }
+
+    if (status === 'failed' || status === 'error') {
+      return {
+        status: 'failed',
+        error: `Agnes Video: Task failed - ${JSON.stringify(resp.error || resp.message || resp).slice(0, 300)}`,
+      }
+    }
+
+    if (status === 'processing' || status === 'running' || status === 'in_progress') {
+      return { status: 'processing' }
+    }
+
+    return { status: 'pending' }
+  }
+}
+
+// ============================================================================
 // Adapter Registry
 // ============================================================================
 
@@ -577,6 +706,7 @@ export const videoAdapters: Record<string, VideoProviderAdapter> = {
   vidu: new ViduVideoAdapter(),
   ali: new AliVideoAdapter(),
   scnet: new SCnetVideoAdapter(),
+  agnes: new AgnesVideoAdapter(),
 }
 
 export function getVideoAdapter(provider: string): VideoProviderAdapter {
