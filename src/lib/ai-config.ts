@@ -131,6 +131,16 @@ const EOL_MODEL_REPLACEMENTS: Record<string, string> = {
   'deepseek-ai/deepseek-v4-pro': 'meta/llama-3.3-70b-instruct',
 }
 
+// Agnes 默认网关已切换至中国服务（api.agnes-ai.cn）。
+// 存量 DB 记录若保存的是旧国际地址，读取时统一替换，确保已部署环境立即生效，
+// 待存量数据刷新后此映射可移除。
+const AGNES_OLD_BASE_URL = 'https://apihub.agnes-ai.com/v1'
+const AGNES_NEW_BASE_URL = 'https://api.agnes-ai.cn/v1'
+
+function resolveAgnesBaseUrl(baseUrl: string): string {
+  return baseUrl === AGNES_OLD_BASE_URL ? AGNES_NEW_BASE_URL : baseUrl
+}
+
 function resolveModel(provider: string, storedModel: string, preset?: { defaultModel?: string }): string {
   // If stored model exists and is NOT in the EOL list, use it
   if (storedModel && !EOL_MODEL_REPLACEMENTS[storedModel]) {
@@ -172,7 +182,7 @@ export async function getActiveProvider(category: AiCategory): Promise<ProviderC
         provider: dbProvider.provider,
         name: dbProvider.name || preset?.name || dbProvider.provider,
         apiKey: realDbKey || realEnvKey,
-        baseUrl: dbProvider.baseUrl || preset?.defaultBaseUrl || '',
+        baseUrl: resolveAgnesBaseUrl(dbProvider.baseUrl || '') || preset?.defaultBaseUrl || '',
         model: resolveModel(dbProvider.provider, dbProvider.model, preset),
         isActive: true,
       }
@@ -261,7 +271,7 @@ export async function getActiveProviderForUser(category: AiCategory, userId?: st
         provider: userProvider.provider,
         name: preset?.name ?? userProvider.provider,
         apiKey: userProvider.apiKey,
-        baseUrl: userProvider.baseUrl || preset?.defaultBaseUrl || '',
+        baseUrl: resolveAgnesBaseUrl(userProvider.baseUrl || '') || preset?.defaultBaseUrl || '',
         model: resolveModel(userProvider.provider, userProvider.model, preset),
         isActive: true,
       }
@@ -312,7 +322,7 @@ export async function getAllProviders(category: AiCategory): Promise<ProviderCon
       provider: preset.provider,
       name: existing?.name || preset.name,
       apiKey: existing?.apiKey || envApiKey,
-      baseUrl: existing?.baseUrl || preset.defaultBaseUrl,
+      baseUrl: resolveAgnesBaseUrl(existing?.baseUrl || '') || preset.defaultBaseUrl,
       model: existing?.model || preset.defaultModel,
       isActive: existing?.isActive ?? false,
     })
