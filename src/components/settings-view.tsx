@@ -2128,11 +2128,21 @@ export function SettingsView() {
 
   // Save custom provider — saves as a user provider
   // Determine category from the first discovered model's type, or default to 'llm'
+
+  // Whether the provider being edited already has a stored key in its
+  // UserProvider record. When true, the key field can be left empty on
+  // save — the backend keeps the stored key (apiKey omitted in payload).
+  function hasStoredProviderKey(): boolean {
+    if (!editingProvider || !selectedProviderKey) return false
+    const [cat, prov] = selectedProviderKey.split(':')
+    return Boolean(userProvidersData[cat]?.find(p => p.provider === prov)?.apiKey)
+  }
+
   async function handleSaveCustom() {
-    if (!editName.trim() || !editApiKey.trim()) {
+    if (!editName.trim()) {
       toast({
         title: ts('saveFailed'),
-        description: '请填写名称和 API Key',
+        description: '请填写供应商名称',
         variant: 'destructive',
       })
       return
@@ -2161,6 +2171,19 @@ export function SettingsView() {
       ? selectedProviderKey.split(':')[1]
       : editName.trim().toLowerCase().replace(/[^a-z0-9]/g, '-').slice(0, 30)
 
+    // Key is only required when there is no stored key to keep.
+    // Look up by the final (category, provider) the save targets —
+    // editing can shift the category when model types are changed.
+    const savedApiKey = userProvidersData[category]?.find(p => p.provider === provider)?.apiKey
+    if (!editApiKey.trim() && !savedApiKey) {
+      toast({
+        title: ts('saveFailed'),
+        description: '请填写 API Key（该供应商还没有已保存的 Key）',
+        variant: 'destructive',
+      })
+      return
+    }
+
     // Determine the model to save — use first discovered text model, or editModel, or first model
     const firstTextModel = discoveredModels.find(m => m.type === 'text')
     const firstAnyModel = discoveredModels[0]
@@ -2171,7 +2194,8 @@ export function SettingsView() {
         category,
         provider,
         name: editName,
-        apiKey: editApiKey,
+        // Omit apiKey when left empty — backend update keeps the stored key
+        ...(editApiKey.trim() ? { apiKey: editApiKey } : {}),
         baseUrl: editBaseUrl,
         model: modelToSave,
         isActive: true, // Auto-activate so it's immediately usable
@@ -2496,6 +2520,11 @@ export function SettingsView() {
                           {editShowKey ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
                         </Button>
                       </div>
+                      {editingProvider && hasStoredProviderKey() && (
+                        <p className="text-[10px] text-muted-foreground">
+                          留空则保留已保存的 Key
+                        </p>
+                      )}
                     </div>
 
                     {/* Model Discovery Protocol */}
@@ -2724,7 +2753,7 @@ export function SettingsView() {
                         type="button"
                         size="sm"
                         onClick={handleSaveCustom}
-                        disabled={!editName.trim() || !editApiKey.trim()}
+                        disabled={!editName.trim() || (!editApiKey.trim() && !hasStoredProviderKey())}
                         className="gap-1.5"
                       >
                         <Save className="size-3.5" />
