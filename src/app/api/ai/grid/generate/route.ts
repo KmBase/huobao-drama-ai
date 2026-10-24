@@ -127,7 +127,7 @@ export async function POST(request: NextRequest) {
       })
 
       // Use the adapter to generate the image
-      const adapter = getImageAdapter(provider.provider)
+      const adapter = getImageAdapter(provider.provider, provider.model)
       const config = {
         baseUrl: provider.baseUrl,
         apiKey: provider.apiKey,

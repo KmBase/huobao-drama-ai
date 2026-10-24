@@ -86,7 +86,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const adapter = getImageAdapter(provider.provider)
+    const adapter = getImageAdapter(provider.provider, provider.model)
     const config = {
       baseUrl: provider.baseUrl,
       apiKey: provider.apiKey,

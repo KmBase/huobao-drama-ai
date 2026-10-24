@@ -22,16 +22,18 @@ export async function POST(request: NextRequest) {
     // Resolve the same provider generation used (user-level key first, then platform default)
     const provider = await getActiveProviderForUser(category, auth.userId)
     if (!provider) {
-      return NextResponse.json({ error: 'No active provider' }, { status: 400 })
+      // 200 with a terminal status so the client fails fast instead of
+      // treating the request error as a transient poll failure
+      return NextResponse.json({ status: 'failed', error: `未配置可用的${category === 'image' ? '图片' : '视频'}生成供应商` })
     }
 
     if (category === 'image') {
       const { getImageAdapter } = await import('@/lib/adapters/image')
-      const adapter = getImageAdapter(provider.provider)
+      const adapter = getImageAdapter(provider.provider, provider.model)
       const config = { baseUrl: provider.baseUrl, apiKey: provider.apiKey, model: provider.model }
       const pollReq = adapter.buildPollRequest(config, taskId)
       if (!pollReq) {
-        return NextResponse.json({ status: 'unsupported', error: '该供应商不支持轮询' }, { status: 400 })
+        return NextResponse.json({ status: 'unsupported', error: `供应商 ${provider.provider} 不支持图片任务轮询` })
       }
       const pollRes = await fetch(pollReq.url, { method: pollReq.method, headers: pollReq.headers })
       const pollData = await pollRes.json()
@@ -67,11 +69,11 @@ export async function POST(request: NextRequest) {
 
     if (category === 'video') {
       const { getVideoAdapter } = await import('@/lib/adapters/video')
-      const adapter = getVideoAdapter(provider.provider)
+      const adapter = getVideoAdapter(provider.provider, provider.model)
       const config = { baseUrl: provider.baseUrl, apiKey: provider.apiKey, model: provider.model }
       const pollReq = adapter.buildPollRequest(config, taskId)
       if (!pollReq) {
-        return NextResponse.json({ status: 'unsupported', error: '该供应商不支持轮询' }, { status: 400 })
+        return NextResponse.json({ status: 'unsupported', error: `供应商 ${provider.provider} 不支持视频任务轮询` })
       }
       const pollRes = await fetch(pollReq.url, { method: pollReq.method, headers: pollReq.headers })
       const pollData = await pollRes.json()

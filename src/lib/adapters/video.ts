@@ -709,6 +709,9 @@ export const videoAdapters: Record<string, VideoProviderAdapter> = {
   agnes: new AgnesVideoAdapter(),
 }
 
-export function getVideoAdapter(provider: string): VideoProviderAdapter {
-  return videoAdapters[provider] || videoAdapters['minimax']
+export function getVideoAdapter(provider: string, model?: string): VideoProviderAdapter {
+  if (videoAdapters[provider]) return videoAdapters[provider]
+  // Custom providers are matched by model prefix (e.g. "agnes-video-..." → Agnes)
+  if (model?.startsWith('agnes-')) return videoAdapters['agnes']
+  return videoAdapters['minimax']
 }
