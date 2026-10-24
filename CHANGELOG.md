@@ -31,6 +31,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   三处解析时统一替换，已部署环境立即生效；存量数据刷新后此映射可移除
 - `.env.example`: 注释更新为中国地址为主，国际地址为备选
 
+### Fixed — Agnes 生图/生视频异步链路
+
+- **生图误判为异步任务（根因）**: Agnes 同步生图响应附带 `task_id`，适配器"先看 task_id"
+  把已完成的图误判为异步任务，导致前端进入不支持的轮询链路盲等 5 分钟后失败
+  - `AgnesImageAdapter` / `OpenAIImageAdapter` 解析顺序改为"先看 `data[0]`，无图片数据才看 `task_id`"
+  - 修复后 Agnes 生图完全同步返回，无需轮询
+- **视频首帧不可达**: 分镜 `first_frame` 传站内相对路径 `/api/files/...`，外部 API 无法访问，
+  任务提交后永远无法完成
+  - `ai-config.generateVideo` 提交前把本地文件读取并内联为 Data URI（Agnes 官方支持），
+    `data:` / `http(s):` 地址原样透传
+- **轮询快速失败**: `/api/ai/poll-status` 对"不支持轮询 / 无可用供应商"返回 200 结构化状态
+  （原来是 400，被前端吞掉后盲等 10 分钟）；前端 `pollAsyncTask` 遇到
+  `failed` / `unsupported` 立即报错，网络抖动容忍连续 3 次后放弃
+- **自定义供应商适配器识别**: `getImageAdapter` / `getVideoAdapter` 支持按模型名前缀识别
+  （`agnes-*` → Agnes 适配器），自定义 OpenAI 兼容方式接入 Agnes 不再落到错误的兜底适配器；
+  所有调用点（生成 / 轮询 / 宫格图）传入 `provider.model`
+
 ### Fixed — 剧本工坊全流程可用 (P0)
 
 #### 根因: NVIDIA 默认模型 EOL

@@ -105,6 +105,37 @@ async function fetchReferenceImagesAsBase64(
   return results
 }
 
+/**
+ * Make a media URL remotely accessible to external AI providers.
+ * App-relative /api/files/ paths cannot be fetched by external APIs —
+ * they are read from local storage and inlined as a Data URI instead.
+ * Data:, http(s): and blob URLs are returned unchanged.
+ */
+async function resolveRemoteAccessibleUrl(
+  url: string | undefined,
+  label = '素材'
+): Promise<string | undefined> {
+  if (!url) return url
+  if (url.startsWith('data:') || /^https?:\/\//i.test(url)) return url
+
+  if (url.startsWith('/api/files/')) {
+    const { readMediaFile } = await import('@/lib/file-storage')
+    const buffer = await readMediaFile(url)
+    if (!buffer) {
+      throw new Error(`${label}文件不存在或已过期: ${url}`)
+    }
+    const ext = url.split('.').pop()?.toLowerCase() ?? ''
+    const mimeType =
+      ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg'
+      : ext === 'webp' ? 'image/webp'
+      : ext === 'mp4' ? 'video/mp4'
+      : 'image/png'
+    return `data:${mimeType};base64,${buffer.toString('base64')}`
+  }
+
+  return url
+}
+
 // ============================================================
 // DB-backed provider config
 // ============================================================
@@ -710,7 +741,7 @@ export const aiClient = {
 
     // All providers use the adapter pattern
     const { getImageAdapter } = await import('@/lib/adapters/image')
-    const adapter = getImageAdapter(provider.provider)
+    const adapter = getImageAdapter(provider.provider, provider.model)
     const config = { baseUrl: provider.baseUrl, apiKey: provider.apiKey, model: provider.model }
     const size = options?.size ?? '1024x1024'
 
@@ -1009,10 +1040,13 @@ export const aiClient = {
 
       // All providers use the adapter pattern
       const { getVideoAdapter } = await import('@/lib/adapters/video')
-      const adapter = getVideoAdapter(provider.provider)
+      const adapter = getVideoAdapter(provider.provider, provider.model)
       const config = { baseUrl: provider.baseUrl, apiKey: provider.apiKey, model: provider.model }
 
-      const req = adapter.buildGenerateRequest(config, { prompt, firstFrameUrl, duration: 5 })
+      // External APIs cannot fetch app-relative /api/files/ URLs —
+      // inline local first-frame files as data URIs before submitting
+      const remoteFrameUrl = await resolveRemoteAccessibleUrl(firstFrameUrl, '首帧图片')
+      const req = adapter.buildGenerateRequest(config, { prompt, firstFrameUrl: remoteFrameUrl, duration: 5 })
       const res = await fetch(req.url, { method: req.method, headers: req.headers, body: JSON.stringify(req.body) })
 
       if (!res.ok) {

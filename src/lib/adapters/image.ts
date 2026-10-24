@@ -94,12 +94,10 @@ export class OpenAIImageAdapter implements ImageProviderAdapter {
     imageUrl?: string
     imageBase64?: string
   } {
-    // Async response — provider returns a task_id
-    if (result?.task_id) {
-      return { isAsync: true, taskId: result.task_id }
-    }
-
-    // Sync response — provider returns data array with image URLs
+    // Sync response — provider returns data array with image URLs.
+    // Check image data BEFORE task_id: some gateways (e.g. Agnes) attach a
+    // task_id to synchronous responses, which must not be mistaken for an
+    // async task.
     if (result?.data?.length) {
       const url = result.data[0]?.url
       const b64 = result.data[0]?.b64_json
@@ -107,6 +105,11 @@ export class OpenAIImageAdapter implements ImageProviderAdapter {
         return { isAsync: false, imageBase64: b64 }
       }
       return { isAsync: false, imageUrl: url }
+    }
+
+    // Async response — provider returns a task_id
+    if (result?.task_id) {
+      return { isAsync: true, taskId: result.task_id }
     }
 
     return { isAsync: false }
@@ -675,10 +678,8 @@ export class AgnesImageAdapter implements ImageProviderAdapter {
     imageUrl?: string
     imageBase64?: string
   } {
-    if (result?.task_id) {
-      return { isAsync: true, taskId: result.task_id }
-    }
-
+    // Check image data BEFORE task_id — Agnes attaches a task_id to sync
+    // responses, which must not be mistaken for an async task
     if (result?.data?.length) {
       const b64 = result.data[0]?.b64_json
       if (b64) {
@@ -688,6 +689,10 @@ export class AgnesImageAdapter implements ImageProviderAdapter {
       if (imageUrl) {
         return { isAsync: false, imageUrl }
       }
+    }
+
+    if (result?.task_id) {
+      return { isAsync: true, taskId: result.task_id }
     }
 
     return { isAsync: false }
@@ -728,7 +733,10 @@ export const imageAdapters: Record<string, ImageProviderAdapter> = {
 /**
  * Get the image adapter for a given provider name.
  * Falls back to the OpenAI adapter if the provider is not found.
+ * Custom providers are matched by model prefix (e.g. "agnes-image-..." → Agnes).
  */
-export function getImageAdapter(provider: string): ImageProviderAdapter {
-  return imageAdapters[provider] || imageAdapters['openai']
+export function getImageAdapter(provider: string, model?: string): ImageProviderAdapter {
+  if (imageAdapters[provider]) return imageAdapters[provider]
+  if (model?.startsWith('agnes-')) return imageAdapters['agnes']
+  return imageAdapters['openai']
 }

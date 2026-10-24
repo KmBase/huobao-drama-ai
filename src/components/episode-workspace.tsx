@@ -728,21 +728,30 @@ export function EpisodeWorkspace() {
     signal?: AbortSignal,
     storyboardId?: string
   ): Promise<{ imageBase64?: string; videoUrl?: string } | null> => {
+    let consecutiveErrors = 0
     for (let i = 0; i < maxPolls; i++) {
       if (signal?.aborted) return null
       await new Promise((r) => setTimeout(r, interval))
       if (signal?.aborted) return null
+
+      let pollResult: Awaited<ReturnType<typeof api.ai.pollStatus>>
       try {
-        const pollResult = await api.ai.pollStatus(category, taskId, storyboardId)
-        if (pollResult.status === 'completed') {
-          return { imageBase64: pollResult.imageBase64, videoUrl: pollResult.videoUrl }
-        }
-        if (pollResult.status === 'failed') {
-          throw new Error(pollResult.error || '生成失败')
-        }
+        pollResult = await api.ai.pollStatus(category, taskId, storyboardId)
+        consecutiveErrors = 0
       } catch (err) {
+        // Network/server blip — tolerate a few, then fail instead of blind-waiting
         if (signal?.aborted) return null
-        if (i === maxPolls - 1) throw err
+        consecutiveErrors++
+        if (consecutiveErrors >= 3) throw err
+        continue
+      }
+
+      if (pollResult.status === 'completed') {
+        return { imageBase64: pollResult.imageBase64, videoUrl: pollResult.videoUrl }
+      }
+      // Terminal states — surface immediately instead of polling until timeout
+      if (pollResult.status === 'failed' || pollResult.status === 'unsupported') {
+        throw new Error(pollResult.error || '生成失败')
       }
     }
     throw new Error('生成超时，请稍后重试')
