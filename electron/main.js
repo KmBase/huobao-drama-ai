@@ -32,6 +32,7 @@ const initSqlPath = path.join(__dirname, 'sqlite-init.sql')
 const userDataDir = app.getPath('userData')
 const dbPath = path.join(userDataDir, 'huobao.db')
 const configPath = path.join(userDataDir, 'desktop-config.json')
+const aiProvidersPath = path.join(userDataDir, 'ai-providers.json')
 const serverLogPath = path.join(userDataDir, 'server.log')
 
 // ---------- Config (persisted secret + admin credentials) ----------
@@ -58,6 +59,51 @@ function loadConfig() {
     console.error('[desktop] Failed to persist config:', err.message)
   }
   return config
+}
+
+// Desktop AI key config — a dedicated, never-rewritten JSON file so the
+// user can fill in provider keys without env vars or the settings UI.
+// The server reads it via HUOBAO_DESKTOP_CONFIG (src/lib/ai-config.ts).
+function ensureAiProvidersTemplate() {
+  if (fs.existsSync(aiProvidersPath)) return
+  const template = {
+    _说明: '桌面版 AI 密钥配置文件。按类目填写 provider 和 apiKey 即可，无需环境变量。留空或删除的类目会回退到应用内「设置」页配置 → 内置免费渠道。',
+    _生效顺序: '本文件 > 应用内设置页 > 环境变量 > 内置免费渠道(z-ai-sdk)',
+    image: {
+      _可选provider: 'z-ai-sdk | openai | chatfire | gemini | minimax | volcengine | ali | agnes | custom',
+      provider: '',
+      apiKey: '',
+      model: '',
+      baseUrl: '',
+    },
+    llm: {
+      _可选provider: 'z-ai-sdk | nvidia | openai | siliconflow | deepseek | sensenova | openrouter | mimo | agnes | custom',
+      provider: '',
+      apiKey: '',
+      model: '',
+      baseUrl: '',
+    },
+    video: {
+      _可选provider: 'z-ai-sdk | minimax | volcengine | vidu | ali | scnet | agnes | custom',
+      provider: '',
+      apiKey: '',
+      model: '',
+      baseUrl: '',
+    },
+    tts: {
+      _可选provider: 'z-ai-sdk | minimax | openai | chatfire | ali | fish-audio | mimo | custom',
+      provider: '',
+      apiKey: '',
+      model: '',
+      baseUrl: '',
+    },
+  }
+  try {
+    fs.writeFileSync(aiProvidersPath, JSON.stringify(template, null, 2))
+    console.log(`[desktop] AI key config template created: ${aiProvidersPath}`)
+  } catch (err) {
+    console.error('[desktop] Failed to create AI key config template:', err.message)
+  }
 }
 
 // Prisma resolves `file:` URLs — absolute path with forward slashes works on Windows too.
@@ -142,6 +188,7 @@ function startServer(config, port) {
   childEnv.AUTH_TRUST_HOST = 'true'
   childEnv.NODE_ENV = 'production'
   childEnv.HUOBAO_DESKTOP = '1'
+  childEnv.HUOBAO_DESKTOP_CONFIG = aiProvidersPath
   childEnv.PORT = String(port)
   childEnv.HOSTNAME = '127.0.0.1'
   childEnv.ELECTRON_RUN_AS_NODE = '1'
@@ -291,6 +338,8 @@ async function bootstrap() {
 
   createWindow(baseUrl)
   ensureServerNodeModules()
+  ensureAiProvidersTemplate()
+  console.log(`[desktop] AI key config: ${aiProvidersPath}`)
   await ensureDatabase()
   startServer(config, port)
   await waitForServer(baseUrl)

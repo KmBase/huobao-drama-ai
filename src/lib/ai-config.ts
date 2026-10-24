@@ -7,6 +7,7 @@
 // ============================================================
 
 import { AsyncLocalStorage } from 'async_hooks'
+import fs from 'fs'
 import { db } from '@/lib/db'
 
 // ============================================================
@@ -286,7 +287,65 @@ export async function hasGlobalDefaultProvider(category: AiCategory): Promise<bo
  *   - Users without their own key automatically use the platform default
  *   - Platform API keys are NEVER leaked through the UserProvider path
  */
+// ============================================================
+// Desktop (Electron) provider config — ai-providers.json
+// In desktop mode the Electron main process passes the absolute
+// path via HUOBAO_DESKTOP_CONFIG. The file is user-editable and
+// takes priority over the DB / env var chain, so keys can be
+// configured without touching env vars or the settings UI.
+// ============================================================
+
+interface DesktopProviderEntry {
+  provider?: string
+  apiKey?: string
+  model?: string
+  baseUrl?: string
+}
+
+export function readDesktopProviderConfig(category: AiCategory): ProviderConfig | null {
+  const configPath = process.env.HUOBAO_DESKTOP_CONFIG
+  if (!configPath) return null
+
+  let raw: unknown
+  try {
+    raw = JSON.parse(fs.readFileSync(configPath, 'utf8'))
+  } catch {
+    return null // missing/invalid file → fall through to DB / env chain
+  }
+
+  const entry = (raw as Record<string, unknown>)?.[category] as DesktopProviderEntry | undefined
+  if (!entry || typeof entry !== 'object') return null
+
+  const provider = typeof entry.provider === 'string' ? entry.provider.trim() : ''
+  if (!provider) return null
+
+  const preset = PROVIDER_PRESETS[category]?.find((p) => p.provider === provider)
+  const apiKey = typeof entry.apiKey === 'string' ? entry.apiKey.trim() : ''
+  const needsNoKey = provider === 'z-ai-sdk'
+  if (!apiKey || isPlaceholderKey(apiKey)) {
+    if (!needsNoKey) return null
+  }
+
+  const baseUrl = typeof entry.baseUrl === 'string' ? entry.baseUrl.trim() : ''
+  const model = typeof entry.model === 'string' ? entry.model.trim() : ''
+  return {
+    category,
+    provider,
+    name: preset?.name ?? provider,
+    apiKey: isPlaceholderKey(apiKey) ? '' : apiKey,
+    baseUrl: resolveAgnesBaseUrl(baseUrl) || preset?.defaultBaseUrl || '',
+    model: resolveModel(provider, model, preset),
+    isActive: true,
+  }
+}
+
 export async function getActiveProviderForUser(category: AiCategory, userId?: string): Promise<ProviderConfig | null> {
+  // 0. Desktop mode: ai-providers.json first (single-user, no env vars needed)
+  if (process.env.HUOBAO_DESKTOP === '1') {
+    const desktopProvider = readDesktopProviderConfig(category)
+    if (desktopProvider) return desktopProvider
+  }
+
   // 1. If userId provided, check for user-level active provider first
   if (userId) {
     const userProvider = await db.userProvider.findFirst({
