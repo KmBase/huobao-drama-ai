@@ -66,8 +66,10 @@ function userProviderToConfig(up: {
  * SECURITY: Filters out any UserProvider records whose apiKey matches
  * a platform (admin/env) key — these are "dirty data" from a previous
  * bug that leaked platform keys into the UserProvider table.
+ * EXCEPTION: admins may keep such records — the platform key is their
+ * own key, and they legitimately re-enter it when editing providers.
  */
-async function buildUserProvidersMap(userId: string): Promise<Record<string, ProviderConfig[]>> {
+async function buildUserProvidersMap(userId: string, isAdmin = false): Promise<Record<string, ProviderConfig[]>> {
   const userProviders = await db.userProvider.findMany({
     where: { userId },
     orderBy: { createdAt: 'asc' },
@@ -86,7 +88,7 @@ async function buildUserProvidersMap(userId: string): Promise<Record<string, Pro
 
     // SECURITY CHECK: If this userProvider's apiKey matches a platform key,
     // delete the dirty record and skip it — this was leaked data from a previous bug
-    if (up.apiKey && await isPlatformApiKey(up.category, up.provider, up.apiKey)) {
+    if (!isAdmin && up.apiKey && await isPlatformApiKey(up.category, up.provider, up.apiKey)) {
       console.warn(`[SECURITY] Cleaning dirty UserProvider record: user=${userId}, category=${up.category}, provider=${up.provider} — apiKey matches platform key, deleting`)
       await db.userProvider.deleteMany({
         where: { userId, category: up.category, provider: up.provider },
@@ -111,7 +113,7 @@ export async function GET() {
     const auth = await requireAuth()
     if (auth.error) return auth.error
 
-    const providers = await buildUserProvidersMap(auth.userId)
+    const providers = await buildUserProvidersMap(auth.userId, auth.role === 'admin')
     return NextResponse.json({ providers })
   } catch (error) {
     console.error('Failed to get user providers:', error)
@@ -145,8 +147,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // SECURITY: Block saving if the provided apiKey matches a platform key
-    if (apiKey && await isPlatformApiKey(category, provider, apiKey)) {
+    // SECURITY: Block saving if the provided apiKey matches a platform key.
+    // Admins are exempt — the platform key is their own key and they
+    // legitimately re-enter it when editing their provider config.
+    if (apiKey && auth.role !== 'admin' && await isPlatformApiKey(category, provider, apiKey)) {
       console.warn(`[SECURITY] Blocked save of platform key to UserProvider: user=${auth.userId}, category=${category}, provider=${provider}`)
       // Also clean any existing dirty record
       await db.userProvider.deleteMany({
@@ -214,7 +218,7 @@ export async function POST(request: NextRequest) {
     })
     console.log(`[UserProvider POST] Save result: found=${Boolean(saved)}, hasKey=${Boolean(saved?.apiKey)}, isActive=${saved?.isActive}`)
 
-    const providers = await buildUserProvidersMap(auth.userId)
+    const providers = await buildUserProvidersMap(auth.userId, auth.role === 'admin')
     return NextResponse.json({ providers })
   } catch (error) {
     console.error('Failed to save user provider:', error)
@@ -247,7 +251,7 @@ export async function DELETE(request: NextRequest) {
         where: { userId: auth.userId, category: queryCategory, isActive: true },
         data: { isActive: false },
       })
-      const providers = await buildUserProvidersMap(auth.userId)
+      const providers = await buildUserProvidersMap(auth.userId, auth.role === 'admin')
       return NextResponse.json({ success: true, providers })
     }
 
@@ -270,7 +274,7 @@ export async function DELETE(request: NextRequest) {
       },
     })
 
-    const providers = await buildUserProvidersMap(auth.userId)
+    const providers = await buildUserProvidersMap(auth.userId, auth.role === 'admin')
     return NextResponse.json({ providers })
   } catch (error) {
     console.error('Failed to delete user provider:', error)

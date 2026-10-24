@@ -1331,7 +1331,9 @@ export const api = {
       category: string
       provider: string
       name?: string
-      apiKey: string
+      // Optional — omitted means "keep the key already stored" when updating
+      // an existing UserProvider record (backend upsert handles undefined).
+      apiKey?: string
       baseUrl?: string
       model?: string
       isActive?: boolean
