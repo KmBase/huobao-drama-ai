@@ -99,6 +99,26 @@ bun run dev
 4. 部署完成后，在平台设置页面配置更多供应商
 5. 首次访问时数据库表会自动迁移
 
+### Electron 桌面版（Windows）
+
+把整个应用打包为本地桌面应用：内置 Next.js 服务 + 本地 SQLite 数据库，数据保存在用户目录，无需 Vercel 和外部数据库。
+
+```bash
+# 安装依赖（含 electron / electron-builder）
+npm install
+
+# 构建并直接运行（开发验证）
+npm run desktop
+
+# 生成免安装包（release/win-unpacked）
+npm run desktop:pack
+
+# 生成 NSIS 安装程序（release/）
+npm run desktop:dist
+```
+
+首次启动会在本地创建 SQLite 数据库并自动创建管理员账号（默认 `admin@huobao.com` / `admin123`，可用 `ADMIN_EMAIL` / `ADMIN_PASSWORD` 环境变量覆盖）并自动登录。数据库与配置保存在 `%APPDATA%/huobao-drama-ai/`。
+
 ### 环境变量
 
 | 变量名 | 说明 | 必填 |

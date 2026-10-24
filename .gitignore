@@ -108,3 +108,9 @@ data/skills/
 
 # Caddyfile (local dev reverse proxy, not needed in repo)
 Caddyfile
+
+# Electron desktop build artifacts
+release/
+electron/sqlite-init.sql
+desktop-payload/
+electron-test.log

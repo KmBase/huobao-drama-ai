@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — Electron 桌面版
+
+- 新增 Electron 桌面壳（`electron/main.js`）：内嵌启动 Next.js standalone 服务，BrowserWindow 加载本地端口
+- 新增 `scripts/prepare-desktop.js`：切换 SQLite schema、生成建库 SQL、standalone 构建、打包 payload 暂存
+- 首次启动自动初始化 SQLite 数据库（`%APPDATA%/huobao-drama-ai/huobao.db`）并创建管理员账号、自动登录
+- `next.config.ts`：开启 `output: "standalone"` + `outputFileTracingExcludes`（不影响 Vercel 部署）
+- 修复：standalone 运行时下 next-intl `as-needed` 默认语言 rewrite 死循环（桌面构建改用 `localePrefix: "always"`，Web 行为不变）
+- 新增脚本：`desktop:prepare` / `desktop` / `desktop:pack` / `desktop:dist`
+
 ### Added — Agnes AI 供应商适配
 
 - `provider-presets.ts`: 新增 `agnes` 预设（LLM / 图片 / 视频）
