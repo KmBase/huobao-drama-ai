@@ -1614,6 +1614,10 @@ export function SettingsView() {
   >([])
   const [discovering, setDiscovering] = useState(false)
   const [discoverError, setDiscoverError] = useState<string | null>(null)
+  // Manual model management — add / remove / rename model IDs in the list
+  const [newModelId, setNewModelId] = useState('')
+  const [editingModelId, setEditingModelId] = useState<string | null>(null)
+  const [editingModelValue, setEditingModelValue] = useState('')
   // Edit form state
   const [editName, setEditName] = useState('')
   const [editBaseUrl, setEditBaseUrl] = useState('')
@@ -1963,6 +1967,8 @@ export function SettingsView() {
       })
     )
     setDiscoverError(null)
+    setNewModelId('')
+    setEditingModelId(null)
     setCustomTestResult(null)
     setEditingProvider(true)
     setAddingCustom(false)
@@ -1978,6 +1984,8 @@ export function SettingsView() {
     setEditModel('')
     setDiscoveredModels([])
     setDiscoverError(null)
+    setNewModelId('')
+    setEditingModelId(null)
     setCustomTestResult(null)
     setAddingCustom(true)
     setEditingProvider(false)
@@ -1990,6 +1998,8 @@ export function SettingsView() {
     setAddingCustom(false)
     setDiscoveredModels([])
     setDiscoverError(null)
+    setNewModelId('')
+    setEditingModelId(null)
     setCustomTestResult(null)
   }
 
@@ -2009,9 +2019,14 @@ export function SettingsView() {
         const typeInfo = inferModelType(m.id)
         return { id: m.id, name: m.name, type: typeInfo.mediaType, typeLabel: typeInfo.label }
       })
-      setDiscoveredModels(modelsWithType)
+      setDiscoveredModels(prev => {
+        // Merge: discovered models first, then keep any manually added
+        // models that the provider's /models endpoint didn't report
+        const discoveredIds = new Set(modelsWithType.map(m => m.id))
+        return [...modelsWithType, ...prev.filter(m => !discoveredIds.has(m.id))]
+      })
       if (result.models.length === 0) {
-        setDiscoverError('未发现可用模型，请检查 Base URL 和 API Key')
+        setDiscoverError('未发现可用模型，请检查 Base URL 和 API Key，或手动添加模型')
       }
     } catch (err) {
       setDiscoverError(err instanceof Error ? err.message : String(err))
@@ -2029,6 +2044,55 @@ export function SettingsView() {
           : m
       )
     )
+  }
+
+  // Manually add a model ID to the list (for providers without a /models endpoint)
+  function handleAddModel() {
+    const id = newModelId.trim()
+    if (!id) return
+    if (discoveredModels.some(m => m.id === id)) {
+      setDiscoverError(`模型 ${id} 已在列表中`)
+      return
+    }
+    const typeInfo = inferModelType(id)
+    setDiscoveredModels(prev => [
+      ...prev,
+      { id, name: id, type: typeInfo.mediaType, typeLabel: typeInfo.label },
+    ])
+    setNewModelId('')
+    setDiscoverError(null)
+  }
+
+  // Remove a model from the list; clear the default if it was selected
+  function handleRemoveModel(modelId: string) {
+    setDiscoveredModels(prev => prev.filter(m => m.id !== modelId))
+    if (editModel === modelId) setEditModel('')
+    if (editingModelId === modelId) setEditingModelId(null)
+  }
+
+  // Start renaming a model ID
+  function handleStartEditModelId(modelId: string) {
+    setEditingModelId(modelId)
+    setEditingModelValue(modelId)
+  }
+
+  // Commit a model ID rename — reject empty or duplicated IDs
+  function handleCommitModelId() {
+    if (editingModelId === null) return
+    const newId = editingModelValue.trim()
+    const oldId = editingModelId
+    setEditingModelId(null)
+    if (!newId || newId === oldId) return
+    if (discoveredModels.some(m => m.id === newId)) {
+      setDiscoverError(`模型 ${newId} 已在列表中`)
+      return
+    }
+    setDiscoveredModels(prev =>
+      prev.map(m => (m.id === oldId ? { ...m, id: newId, name: newId } : m))
+    )
+    // Keep the default selection pointing at the renamed model
+    if (editModel === oldId) setEditModel(newId)
+    setDiscoverError(null)
   }
 
   // Test custom provider connection
@@ -2484,12 +2548,13 @@ export function SettingsView() {
                       )}
                     </div>
 
-                    {/* Model List */}
-                    {discoveredModels.length > 0 && (
-                      <div className="space-y-1.5">
-                        <Label className="text-xs font-medium">
-                          Models ({discoveredModels.length})
-                        </Label>
+                    {/* Model List — populated by Discover Models, but fully
+                        editable: add / rename / remove model IDs manually */}
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium">
+                        Models ({discoveredModels.length})
+                      </Label>
+                      {discoveredModels.length > 0 ? (
                         <div className="rounded-md border border-border/40 bg-muted/20 divide-y divide-border/30 max-h-80 overflow-y-auto">
                           {discoveredModels.map((m) => {
                             const tagColor = getTypeTagColor(m.type as 'text' | 'image' | 'video' | 'audio')
@@ -2503,13 +2568,28 @@ export function SettingsView() {
                                   editModel === m.id ? 'text-emerald-500' : 'text-muted-foreground/40'
                                 }`}
                               />
-                              <button
-                                type="button"
-                                onClick={() => setEditModel(m.id)}
-                                className="flex-1 text-left text-xs min-w-0"
-                              >
-                                <span className="font-mono truncate">{m.id}</span>
-                              </button>
+                              {editingModelId === m.id ? (
+                                <Input
+                                  autoFocus
+                                  value={editingModelValue}
+                                  onChange={(e) => setEditingModelValue(e.target.value)}
+                                  onBlur={handleCommitModelId}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') handleCommitModelId()
+                                    if (e.key === 'Escape') setEditingModelId(null)
+                                  }}
+                                  className="h-6 flex-1 min-w-0 text-xs font-mono bg-background"
+                                />
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => setEditModel(m.id)}
+                                  className="flex-1 text-left text-xs min-w-0"
+                                  title="点击设为默认模型"
+                                >
+                                  <span className="font-mono truncate">{m.id}</span>
+                                </button>
+                              )}
                               {/* Type selector — user can override auto-detected type */}
                               <Select
                                 value={m.type}
@@ -2525,7 +2605,28 @@ export function SettingsView() {
                                   <SelectItem value="audio">TTS</SelectItem>
                                 </SelectContent>
                               </Select>
-                              {editModel === m.id && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleStartEditModelId(m.id)}
+                                disabled={editingModelId !== null}
+                                className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground shrink-0"
+                                title="Rename model ID"
+                              >
+                                <Pencil className="size-3" />
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleRemoveModel(m.id)}
+                                className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive shrink-0"
+                                title="Remove model"
+                              >
+                                <Trash2 className="size-3" />
+                              </Button>
+                              {editModel === m.id && editingModelId !== m.id && (
                                 <Badge className="text-[9px] px-1 py-0 bg-primary/10 text-primary border-primary/20 shrink-0">
                                   DEFAULT
                                 </Badge>
@@ -2534,13 +2635,43 @@ export function SettingsView() {
                             )
                           })}
                         </div>
-                        {editModel && (
-                          <p className="text-[10px] text-muted-foreground">
-                            Default model: <code className="bg-muted/50 px-1 rounded">{editModel}</code>
-                          </p>
-                        )}
+                      ) : (
+                        <p className="text-[11px] text-muted-foreground">
+                          点击 Discover Models 自动发现，或在下方手动输入模型 ID
+                        </p>
+                      )}
+                      {/* Manual add row */}
+                      <div className="flex gap-2">
+                        <Input
+                          value={newModelId}
+                          onChange={(e) => setNewModelId(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault()
+                              handleAddModel()
+                            }
+                          }}
+                          placeholder="手动添加模型 ID，如 gpt-4o"
+                          className="h-8 text-xs font-mono bg-muted/30 border-border/50"
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={handleAddModel}
+                          disabled={!newModelId.trim()}
+                          className="gap-1 shrink-0"
+                        >
+                          <Plus className="size-3.5" />
+                          Add
+                        </Button>
                       </div>
-                    )}
+                      {editModel && (
+                        <p className="text-[10px] text-muted-foreground">
+                          Default model: <code className="bg-muted/50 px-1 rounded">{editModel}</code>
+                        </p>
+                      )}
+                    </div>
 
                     {/* Test result */}
                     {customTestResult && (
